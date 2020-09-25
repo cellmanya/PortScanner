@@ -15,9 +15,9 @@ int main(){
 	int startport, endport;
 	int err;
 	WSADATA firstsock;
-	SOCKET s;
-	struct addrinfo hints;
-	struct addrinfo *res;
+	SOCKET sckt;
+	struct addrinfo ai;
+	struct addrinfo *result;
 
 	 //Initialise winsock
 	 if (WSAStartup(MAKEWORD(2,0),&firstsock) != 0)  //CHECKS FOR WINSOCK VERSION 2.0
@@ -27,9 +27,9 @@ int main(){
 	 }
 
 
-	memset(&hints, 0, sizeof hints); // make sure the struct is empty
-	hints.ai_family = AF_INET; // IPv4
-	hints.ai_socktype = SOCK_STREAM; // TCP
+	memset(&ai, 0, sizeof ai); // make sure the struct is empty
+	ai.ai_family = AF_INET; // IPv4
+	ai.ai_socktype = SOCK_STREAM; // TCP
 
 	char buffer[2];
 	char host[15];
@@ -51,7 +51,7 @@ int main(){
 
 		 	itoa(i, buffer, 10);
 
-			if ((status = getaddrinfo(host, buffer, &hints, &res)) != 0) {
+			if ((status = getaddrinfo(host, buffer, &ai, &result)) != 0) {
 
 				fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
 
@@ -59,8 +59,8 @@ int main(){
 
 			}
 
-	  s = socket(res->ai_family , res->ai_socktype , res->ai_protocol); //make net a valid socket
-	  if(s < 0)  //if not a socket
+	  sckt = socket(result->ai_family , result->ai_socktype , result->ai_protocol); //make net a valid socket
+	  if(sckt < 0)  //if not a socket
 	  {
 	   perror("\nSocket creation failed");  // perror function prints an error message to stderr
 	   exit(EXIT_FAILURE);
@@ -68,22 +68,22 @@ int main(){
 
 
 	  //connect to the server with that socket
-	  err = connect(s , res->ai_addr , res->ai_addrlen);
+	  err = connect(sckt , result->ai_addr , result->ai_addrlen);
 
 	  if(err == SOCKET_ERROR) //connection not accepted
 	  {
-	   printf("%s %5d Winsock Error Code : %d\n" , res->ai_canonname , i , WSAGetLastError());
+	   printf("%s %5d Winsock Error Code : %d\n" , result->ai_canonname , i , WSAGetLastError());
 	   fflush(stdout);
 	  }
 	  else  //connection accepted
 	  {
-	   printf("%s %5d accepted\n" , res->ai_canonname , i);
+	   printf("%s %5d accepted\n" , result->ai_canonname , i);
 
 	  }
-	  closesocket(s);   //closes the net socket
+	  closesocket(sckt);   //closes the net socket
 	 }
 
-	 freeaddrinfo(res);
+	 freeaddrinfo(result);
 
 	 fflush(stdout);
 
