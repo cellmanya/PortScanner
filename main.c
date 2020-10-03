@@ -10,7 +10,9 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-
+#include <netinet/in.h>
+#include <netdb.h>
+#include <sys/types.h>
 #endif
 
 // Standard Libraries
@@ -147,8 +149,11 @@ int main(){
 
 	tid = (pthread_t*)malloc( threadcount * sizeof(pthread_t));
 
+#if defined(WIN32)
 	connect_t.sockin.sin_addr.S_un.S_addr = inet_addr(ip); // just for IPv4
-
+#else
+	connect_t.sockin.sin_addr.s_addr = inet_addr(ip); // just for IPv4
+#endif
 	connect_t.sckt = socket(PF_INET , SOCK_STREAM , 0); //make net a valid socket
 
 	if(connect_t.sckt < 0)  //if not a socket
