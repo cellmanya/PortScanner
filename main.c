@@ -1,19 +1,3 @@
-// To include getaddrinfo, freeaddrinfo and getnameinfo functions _WIN32_WINNT was defined as 0x0501
-//#define _WIN32_WINNT	0x0501 // default is 0x500
-
-#if defined WIN32
-//#include <winsock2.h>
-//#include <ws2tcpip.h>
-#include <windows.h>
-
-#else
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <sys/types.h>
-#endif
 
 // Standard Libraries
 #include <stdio.h>
@@ -21,75 +5,82 @@
 #include <stdlib.h>
 #include <pthread.h>
 
+
 #if defined WIN32
-typedef struct{
 
-	SOCKET sckt;
-	struct sockaddr_in sockin;
-	int i;
-
-
-}thread_s;
-
-#ifndef _PTHREAD_H
-
-DWORD WINAPI ThreadFunc(void *connect_t){
-
-	  thread_s * sa = (thread_s*)connect_t;
-	  int err = connect(sa->sckt , (struct sockaddr*)&sa->sockin , sizeof(sa->sockin));
-
-
-	  if(err == SOCKET_ERROR) //connection not accepted
-	  {
-	   printf("%s %5u Winsock Error Code : %d\n" , "NULL" , sa->i , WSAGetLastError());
-	   fflush(stdout);
-	  }
-	  else  //connection accepted
-	  {
-	   printf("%s %5u accepted\n" , "NULL" , sa->i);
-
-	  }
-
-
-	return 0;
-}
-#endif
+#include <windows.h>
+#define SOKET SOCKET
 
 #else
-typedef struct{
 
-	int sckt;
-	struct sockaddr_in sockin;
-	int i;
+#include <netdb.h>
+#include <unistd.h>
+#include <termios.h>
 
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <netinet/in.h>
 
-}thread_s;
-
-
+#define SOKET int
 
 #endif
 
+char ip[16];
 
 
 
-void* ThreadFunc(void* connect_t){
+void* ThreadFunc(void* port_t){
 
-	  thread_s * sa = (thread_s*)connect_t;
-	  int err = connect(sa->sckt , (struct sockaddr*)&sa->sockin , sizeof(sa->sockin));
+	  	int port = *(int *)port_t;
+	  	SOKET sckt;
+	  	struct sockaddr_in sockin;
+	  	int err;
+
+	  	sckt = socket(PF_INET , SOCK_STREAM , 0); //make net a valid socket
+
+		if(sckt < 0)  //if not a socket
+		{
+		   perror("\nSocket creation failed");  // perror function prints an error message to stderr
+		   closesocket(sckt);
+		   exit(EXIT_FAILURE);
+		}
+
+		sockin.sin_family = AF_INET;
+		sockin.sin_port = htons(port);
+
+		#if defined(WIN32)
+		sockin.sin_addr.S_un.S_addr = inet_addr(ip); // just for IPv4
+		#else
+		sockin.sin_addr.s_addr = inet_addr(ip); // just for IPv4
+		#endif
+
+		memset(&sockin.sin_zero, 0, sizeof sockin.sin_zero);
 
 
-	  if(err == SOCKET_ERROR) //connection not accepted
-	  {
-	   printf("%s %5u Winsock Error Code : %d\n" , "NULL" , sa->i , WSAGetLastError());
-	   fflush(stdout);
-	  }
-	  else  //connection accepted
-	  {
-	   printf("%s %5u accepted\n" , "NULL" , sa->i);
+		err = connect(sckt , (struct sockaddr*)&sockin , sizeof(sockin));
 
-	  }
 
-	  pthread_exit(NULL);
+		if(err == SOCKET_ERROR) //connection not accepted
+		{
+			printf("%s %5u Winsock Error Code : %d\n" , "NULL" , port , WSAGetLastError());
+			fflush(stdout);
+	    }
+		else  //connection accepted
+		{
+			printf("%s %5u accepted\n" , "NULL" , port);
+
+		}
+
+		#ifdef _WIN32
+		closesocket(sckt);
+		#else
+		close(sckt);
+		#endif
+
+		pthread_exit(NULL);
 
 }
 
@@ -101,19 +92,10 @@ int main(){
 	int startport_i, endport_i;
 	int threadcount;
 	int status;
-	thread_s connect_t;
 	pthread_t *tid;
+	int *port;
 
-#ifndef _PTHREAD_H
-	HANDLE *arrThread;
-	DWORD ThreadID;
-#endif
-
-//	struct addrinfo ai;
-//	struct addrinfo *result;
-//	struct sockaddr_in sa;
-
-#if 0
+#ifdef _WIN32
 		WSADATA firstsock;
 		//Initialise winsock
 		if (WSAStartup(MAKEWORD(2,0),&firstsock) != 0)  //CHECKS FOR WINSOCK VERSION 2.0
@@ -123,12 +105,6 @@ int main(){
 		}
 #endif
 
-	memset(&connect_t.sockin, 0, sizeof connect_t.sockin); // make sure the struct is empty
-//	ai.ai_family = AF_INET; // IPv4
-//	ai.ai_socktype = SOCK_STREAM; // TCP
-	connect_t.sockin.sin_family = AF_INET;
-
-	char ip[16];
 
 	puts("Enter the hostname or IP address : ");
 	fgets(ip, sizeof(ip), stdin);
@@ -142,91 +118,34 @@ int main(){
 
 	threadcount = endport_i - startport_i + 1;
 
+	port = (int*)malloc( threadcount * sizeof(int));
+	for(int i = 0; i < threadcount; i++) port[i] = startport_i + i;
 
-#ifndef _PTHREAD_H
-	arrThread = (void**)malloc( threadcount * sizeof(void*));
-#endif
 
 	tid = (pthread_t*)malloc( threadcount * sizeof(pthread_t));
 
-#if defined(WIN32)
-	connect_t.sockin.sin_addr.S_un.S_addr = inet_addr(ip); // just for IPv4
-#else
-	connect_t.sockin.sin_addr.s_addr = inet_addr(ip); // just for IPv4
-#endif
-	connect_t.sckt = socket(PF_INET , SOCK_STREAM , 0); //make net a valid socket
-
-	if(connect_t.sckt < 0)  //if not a socket
-	{
-	   perror("\nSocket creation failed");  // perror function prints an error message to stderr
-	   closesocket(connect_t.sckt);
-	   exit(EXIT_FAILURE);
-	}
 
 	 //Start the portscan loop
 	puts("Starting the scan loop...\n");
 
-	for(int i = startport_i ; i<= endport_i ; i++){
+	for(int j = 0 ; j < threadcount ; j++){
 
-
-		/*	if ((status = getaddrinfo(ip, , &ai, &result)) != 0) {
-
-				fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
-
-			 exit(EXIT_FAILURE);
-
-			} */
-
-	  connect_t.sockin.sin_port = htons(i);
-	  connect_t.i = i;
-
-
-	   if ((status = pthread_create(&tid[i - startport_i], NULL, ThreadFunc, &connect_t))) {
+		if ((status = pthread_create(&tid[j], NULL, ThreadFunc, &port[j]))) {
 	      fprintf(stderr, "error: pthread_create, status: %d\n", status);
 	      return EXIT_FAILURE;
-	   }
-
-#ifndef _PTHREAD_H
-
-	   arrThread[i - startport_i] = CreateThread(NULL, 0, ThreadFunc, &connect_t, 0, &ThreadID);
-
-      if (arrThread[i - startport_i] == NULL)
-      {
-          printf("Create Thread %d get failed. Error no: %d", (i - startport_i), GetLastError);
-      }
-      else
-    	  printf("CreateThread() is OK, thread ID %u\n", ThreadID);
-
-#endif
+		}
 
 	 }
 
-#ifndef _PTHREAD_H
-
-	 	 WaitForMultipleObjects( threadcount, arrThread, FALSE, 3000 );
-
-
-	 	 for(int j = 0; j < threadcount; j++){
-
-	 		 if(CloseHandle(arrThread[j]) != 0){
-
-	 			 puts("Handle was closed successfully!");
-	 		 }
-	 		 else{
-	 			 printf("Failed to close handle, error %u\n", GetLastError());
-	 		 }
-	 	 }
-
-#endif
-
-
-	  for(int j = 0; j < threadcount; j++){
+	for(int j = 0; j < threadcount; j++){
 
 		  pthread_join(tid[j], NULL);
 
 	  }
 
-	 closesocket(connect_t.sckt);   //closes the net socket
+	#ifdef _WIN32
+		WSACleanup();
+	#endif
 
 	 fflush(stdout);
 
